@@ -15,7 +15,7 @@ const path = require('path');
 puppeteer.use(StealthPlugin());
 
 const app = express();
-app.use(cors());
+app.use(cors({ origin: '*' }));
 app.use(express.json());
 
 // Database functions
