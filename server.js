@@ -127,6 +127,8 @@ async function crawlNaukri(role, location, experience = '') {
         console.log(`Scraping Naukri for ${role} in ${location}...`);
         browser = await puppeteer.launch({
             headless: false, // Set to true in production
+              executablePath: 'C:\\Users\\Abcom\\.cache\\puppeteer\\chrome\\win64-138.0.7204.92\\chrome-win64\\chrome.exe',
+
             args: ['--no-sandbox', '--disable-setuid-sandbox']
         });
 
