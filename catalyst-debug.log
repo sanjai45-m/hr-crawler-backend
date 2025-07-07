@@ -1,0 +1,96 @@
+[debug] [2025-07-07T11:53:29.172Z] : 
+[debug] [2025-07-07T11:53:29.175Z] : ----------------------------------------------------------------------
+[debug] [2025-07-07T11:53:29.176Z] : Command:      C:\Program Files\nodejs\node.exe C:\Users\Abcom\AppData\Roaming\npm\node_modules\zcatalyst-cli\lib\bin\catalyst.js deploy
+[debug] [2025-07-07T11:53:29.177Z] : CLI Version:  1.19.0
+[debug] [2025-07-07T11:53:29.177Z] : Platform:     win32
+[debug] [2025-07-07T11:53:29.177Z] : Node Version: v22.11.0
+[debug] [2025-07-07T11:53:29.177Z] : Time:         Mon Jul 07 2025 17:23:29 GMT+0530 (India Standard Time)
+[debug] [2025-07-07T11:53:29.178Z] : ----------------------------------------------------------------------
+[debug] [2025-07-07T11:53:29.178Z] : 
+[debug] [2025-07-07T11:53:30.131Z] : > authorizing via signed-in user option
+[debug] [2025-07-07T11:53:30.132Z] : > command requires scopes: ["ZohoCatalyst.projects.ALL","ZohoCatalyst.functions.ALL","ZohoCatalyst.webapp.ALL","ZohoCatalyst.appsail.Update"]
+[debug] [2025-07-07T11:53:30.160Z] : >>>> HTTP REQUEST : GET https://api.catalyst.zoho.in/baas/v1/project/9058000000075001 
+
+[debug] [2025-07-07T11:53:30.415Z] : <<<< HTTP RESPONSE : 200
+Response Headers: {"server":"ZGS","date":"Mon, 07 Jul 2025 11:53:30 GMT","content-type":"application/vnd.catalyst.v2+json","transfer-encoding":"chunked","connection":"keep-alive","x-content-type-options":"nosniff","cache-control":"private,no-cache,no-store,max-age=0,must-revalidate","pragma":"no-cache","expires":"Thu, 01 Jan 1970 00:00:00 GMT","x-frame-options":"DENY","strict-transport-security":"max-age=64072000; includeSubDomains; preload"}
+
+[debug] [2025-07-07T11:53:30.425Z] : >>>> HTTP REQUEST : GET https://api.catalyst.zoho.in/baas/v1/project/9058000000075001/environment 
+
+[debug] [2025-07-07T11:53:30.462Z] : <<<< HTTP RESPONSE : 200
+Response Headers: {"server":"ZGS","date":"Mon, 07 Jul 2025 11:53:30 GMT","content-type":"application/vnd.catalyst.v2+json","transfer-encoding":"chunked","connection":"keep-alive","x-content-type-options":"nosniff","cache-control":"private,no-cache,no-store,max-age=0,must-revalidate","pragma":"no-cache","expires":"Thu, 01 Jan 1970 00:00:00 GMT","x-frame-options":"DENY","strict-transport-security":"max-age=64072000; includeSubDomains; preload"}
+
+[info] [2025-07-07T11:53:30.575Z] : 
+[info] [2025-07-07T11:53:30.575Z] : Executing predeploy script in C:\Users\Abcom\hr-job-crawler\appsail-nodejs
+[debug] [2025-07-07T11:53:30.576Z] : Executing command > npm install
+[info] [2025-07-07T11:53:30.576Z] : > npm install
+[debug] [2025-07-07T11:53:36.325Z] : >>>> HTTP REQUEST : PUT https://api.catalyst.zoho.in/baas/v1/project/9058000000075001/appsail/upsert 
+
+[debug] [2025-07-07T11:53:37.683Z] : <<<< HTTP RESPONSE : 200
+Response Headers: {"server":"ZGS","date":"Mon, 07 Jul 2025 11:53:37 GMT","content-type":"application/vnd.catalyst.v2+json","transfer-encoding":"chunked","connection":"keep-alive","x-content-type-options":"nosniff","cache-control":"private,no-cache,no-store,max-age=0,must-revalidate","pragma":"no-cache","expires":"Thu, 01 Jan 1970 00:00:00 GMT","x-frame-options":"DENY","strict-transport-security":"max-age=64072000; includeSubDomains; preload"}
+
+[info] [2025-07-07T11:53:37.705Z] : 
+[info] [2025-07-07T11:53:37.709Z] : i AppSail(crawler): URL => https://crawler-50029180178.development.catalystappsail.in
+[info] [2025-07-07T11:53:37.711Z] : √ AppSail(crawler): deploy successful
+[info] [2025-07-07T11:53:37.712Z] : 
+[info] [2025-07-07T11:53:37.713Z] : √ Catalyst deploy complete!
+[debug] [2025-07-07T11:53:37.716Z] : NO ERRORS REGISTERED
+[debug] [2025-07-07T11:53:37.719Z] : EXEC ENDED with event: deploy, message: success
+[debug] [2025-07-07T11:53:37.719Z] : TOTAL DURATION OF COMMAND EXEC : 7614
+[debug] [2025-07-07T11:53:37.757Z] : >>>> HTTP REQUEST : POST https://api.catalyst.zoho.in/baas/v1/cli/logs 
+<request body omitted>
+
+[debug] [2025-07-07T11:53:38.823Z] : <<<< HTTP RESPONSE : 200
+Response Headers: {"server":"ZGS","date":"Mon, 07 Jul 2025 11:53:39 GMT","content-length":"0","connection":"keep-alive","x-content-type-options":"nosniff","cache-control":"private,no-cache,no-store,max-age=0,must-revalidate","pragma":"no-cache","expires":"Thu, 01 Jan 1970 00:00:00 GMT","x-frame-options":"DENY","strict-transport-security":"max-age=64072000; includeSubDomains; preload"}
+
+[debug] [2025-07-07T11:56:36.762Z] : 
+[debug] [2025-07-07T11:56:36.765Z] : ----------------------------------------------------------------------
+[debug] [2025-07-07T11:56:36.766Z] : Command:      C:\Program Files\nodejs\node.exe C:\Users\Abcom\AppData\Roaming\npm\node_modules\zcatalyst-cli\lib\bin\catalyst.js serve
+[debug] [2025-07-07T11:56:36.767Z] : CLI Version:  1.19.0
+[debug] [2025-07-07T11:56:36.768Z] : Platform:     win32
+[debug] [2025-07-07T11:56:36.768Z] : Node Version: v22.11.0
+[debug] [2025-07-07T11:56:36.768Z] : Time:         Mon Jul 07 2025 17:26:36 GMT+0530 (India Standard Time)
+[debug] [2025-07-07T11:56:36.768Z] : ----------------------------------------------------------------------
+[debug] [2025-07-07T11:56:36.769Z] : 
+[debug] [2025-07-07T11:56:37.377Z] : > authorizing via signed-in user option
+[debug] [2025-07-07T11:56:37.378Z] : > command requires scopes: ["ZohoCatalyst.projects.ALL","ZohoCatalyst.apigateway.apis.READ","ZohoCatalyst.apigateway.READ","ZohoCatalyst.segments.ALL","ZohoCatalyst.cache.READ","ZohoCatalyst.cache.CREATE","ZohoCatalyst.cache.DELETE","ZohoCatalyst.projects.ALL","ZohoCatalyst.cron.ALL","ZohoCatalyst.zcql.CREATE","ZohoCatalyst.projects.users.READ","ZohoCatalyst.projects.users.CREATE","ZohoCatalyst.projects.users.DELETE","ZohoCatalyst.projects.users.UPDATE","ZohoCatalyst.authentication.CREATE","ZohoCatalyst.email.CREATE","ZohoCatalyst.tables.ALL","ZohoCatalyst.tables.rows.ALL","ZohoCatalyst.tables.columns.ALL","ZohoCatalyst.tables.bulk.CREATE","ZohoCatalyst.tables.bulk.READ","ZohoCatalyst.folders.ALL","ZohoCatalyst.files.CREATE","ZohoCatalyst.files.READ","ZohoCatalyst.files.DELETE","ZohoCatalyst.functions.ALL","ZohoCatalyst.functions.EXECUTE","ZohoCatalyst.eventlistners.ALL","ZohoCatalyst.eventlisteners.produce","ZohoCatalyst.security.rules.Read","ZohoCatalyst.security.rules.Update","ZohoCatalyst.notifications.mobile","ZohoCatalyst.notifications.web","ZohoCatalyst.search.READ","ZohoCatalyst.mlkit.READ","QuickML.deployment.READ","ZohoCatalyst.pdfshot.execute","ZohoCatalyst.circuits.execution.DELETE","ZohoCatalyst.circuits.execution.READ","ZohoCatalyst.circuits.execute","ZohoCatalyst.appsail.Read","ZohoCatalyst.jobpool.READ","ZohoCatalyst.job.ALL","ZohoCatalyst.nosql.READ","ZohoCatalyst.nosql.rows.ALL"]
+[debug] [2025-07-07T11:56:37.402Z] : >>>> HTTP REQUEST : GET https://api.catalyst.zoho.in/baas/v1/project/9058000000075001 
+
+[debug] [2025-07-07T11:56:37.600Z] : <<<< HTTP RESPONSE : 200
+Response Headers: {"server":"ZGS","date":"Mon, 07 Jul 2025 11:56:37 GMT","content-type":"application/vnd.catalyst.v2+json","transfer-encoding":"chunked","connection":"keep-alive","x-content-type-options":"nosniff","cache-control":"private,no-cache,no-store,max-age=0,must-revalidate","pragma":"no-cache","expires":"Thu, 01 Jan 1970 00:00:00 GMT","x-frame-options":"DENY","strict-transport-security":"max-age=64072000; includeSubDomains; preload"}
+
+[debug] [2025-07-07T11:56:37.608Z] : >>>> HTTP REQUEST : GET https://api.catalyst.zoho.in/baas/v1/project/9058000000075001/environment 
+
+[debug] [2025-07-07T11:56:37.645Z] : <<<< HTTP RESPONSE : 200
+Response Headers: {"server":"ZGS","date":"Mon, 07 Jul 2025 11:56:37 GMT","content-type":"application/vnd.catalyst.v2+json","transfer-encoding":"chunked","connection":"keep-alive","x-content-type-options":"nosniff","cache-control":"private,no-cache,no-store,max-age=0,must-revalidate","pragma":"no-cache","expires":"Thu, 01 Jan 1970 00:00:00 GMT","x-frame-options":"DENY","strict-transport-security":"max-age=64072000; includeSubDomains; preload"}
+
+[debug] [2025-07-07T11:56:38.285Z] : http port : '3000' is not available. Hence port '3001' will be used instead.
+[debug] [2025-07-07T11:56:38.299Z] : No basic functions to add
+[info] [2025-07-07T11:56:38.302Z] : 
+[info] [2025-07-07T11:56:38.302Z] : Executing AppSail [PRESERVE] [crawler] script in C:\Users\Abcom\hr-job-crawler\appsail-nodejs
+[debug] [2025-07-07T11:56:38.303Z] : Executing command > npm install
+[info] [2025-07-07T11:56:38.303Z] : > npm install
+[info] [2025-07-07T11:56:41.605Z] : 
+[info] [2025-07-07T11:56:41.607Z] :  >>>>>>>>>>>>>> AppSail <<<<<<<<<<<<<< 
+[info] [2025-07-07T11:56:41.608Z] : i crawler: http://localhost:3001
+[info] [2025-07-07T11:56:41.609Z] : 
+[error] [2025-07-07T11:56:41.890Z] : uncaughtException: Unable to start the AppSail
+CatalystError: Unable to start the AppSail
+    at ChildProcess.<anonymous> (C:\Users\Abcom\AppData\Roaming\npm\node_modules\zcatalyst-cli\lib\serve\server\lib\appsail\index.js:190:19)
+    at Object.onceWrapper (node:events:633:26)
+    at ChildProcess.emit (node:events:530:35)
+    at cp.emit (C:\Users\Abcom\AppData\Roaming\npm\node_modules\zcatalyst-cli\node_modules\cross-spawn\lib\enoent.js:34:29)
+    at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+[info] [2025-07-07T11:56:41.897Z] : 
+[error] [2025-07-07T11:56:41.898Z] : × Error: Unable to start the crawler AppSail server with the below parameters.
+Command    : node server.js
+Build path : C:\Users\Abcom\hr-job-crawler\appsail-nodejs
+Runtime    : node16
+[debug] [2025-07-07T11:56:41.898Z] : Error Stack: CatalystError: Unable to start the AppSail
+    at ChildProcess.<anonymous> (C:\Users\Abcom\AppData\Roaming\npm\node_modules\zcatalyst-cli\lib\serve\server\lib\appsail\index.js:190:19)
+    at Object.onceWrapper (node:events:633:26)
+    at ChildProcess.emit (node:events:530:35)
+    at cp.emit (C:\Users\Abcom\AppData\Roaming\npm\node_modules\zcatalyst-cli\node_modules\cross-spawn\lib\enoent.js:34:29)
+    at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+[debug] [2025-07-07T11:56:41.899Z] : Error Status: 500
+[info] [2025-07-07T11:56:41.899Z] : 
+[error] [2025-07-07T11:56:41.900Z] : Please fix the errors if any
