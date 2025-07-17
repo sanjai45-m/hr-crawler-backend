@@ -624,81 +624,68 @@ function generateEmailHtml(jobs) {
 
 // API Routes
 app.post('/api/crawl', async (req, res) => {
-  let browser;
   try {
     const { role, location, source = 'naukri', experience } = req.body;
 
-    // Validate input
     if (!role || !location) {
       return res.status(400).json({
         success: false,
-        error: 'Role and location are required fields'
+        error: 'Role and location are required'
       });
     }
-
-    console.log(`Starting crawl for ${role} in ${location} from ${source}`);
 
     let jobs = [];
     const startTime = Date.now();
 
-    // Route to appropriate scraper
     switch (source.toLowerCase()) {
       case 'naukri':
+        console.log(`Starting Naukri crawl for ${role} in ${location}`);
         jobs = await crawlNaukri(role, location, experience);
         break;
-      // Add cases for other sources (shine, hirist) here
+
+      case 'shine':
+        console.log(`Starting Shine crawl for ${role} in ${location}`);
+        jobs = await crawlShine(role, location);
+        break;
+      
+      case 'hirist':
+        console.log(`Starting Hirist crawl for ${role} in ${location}`);
+        jobs = await crawlHirist(role, location);
+        break;
+
       default:
         return res.status(400).json({
           success: false,
-          error: 'Currently only Naukri scraping is supported in this version'
+          error: 'Invalid source. Supported sources are "naukri", "shine", and "hirist".'
         });
     }
 
     // Save to database
-    const saveResult = await pool.query(
-      `INSERT INTO jobs 
-      (title, company, experience, location, skills, link, source, posted_date)
-      SELECT * FROM UNNEST($1::text[], $2::text[], $3::text[], $4::text[], $5::text[][], $6::text[], $7::text[], $8::timestamp[])
-      ON CONFLICT (link) DO NOTHING
-      RETURNING id`,
-      [
-        jobs.map(j => j.title),
-        jobs.map(j => j.company),
-        jobs.map(j => j.experience),
-        jobs.map(j => j.location),
-        jobs.map(j => j.skills),
-        jobs.map(j => j.link),
-        jobs.map(j => j.source),
-        jobs.map(j => new Date(j.postedDate))
-      ]
-    );
-
-    const newJobs = saveResult.rowCount;
-    const duplicates = jobs.length - newJobs;
+     const { newJobs, duplicates } = await saveJobs(jobs);
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
 
-    // Successful response
-    res.json({
+   res.json({
       success: true,
       source,
       role,
       location,
       totalJobs: jobs.length,
-      newJobs,
-      duplicates,
+      newJobs,       // Use the returned count
+      duplicates,    // Use the returned count
       duration: `${duration} seconds`,
-      jobs: jobs.slice(0, 50) // Return first 50 jobs
+      jobs: jobs.slice(0, 50)
     });
 
   } catch (error) {
     console.error('Crawl error:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to complete crawling',
-      details: isProduction ? undefined : error.message
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
+
 app.get('/api/jobs', async (req, res) => {
   try {
     const { role, location, source, page = 1, limit = 20 } = req.query;
