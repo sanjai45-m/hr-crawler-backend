@@ -21,7 +21,6 @@ const isProduction = process.env.NODE_ENV === 'production';
 
 // Configure Chromium for production
 // chromium.setGraphicsMode = false; // Disable GPU in production
-
 const getBrowser = async () => {
   const launchOptions = {
     args: [
@@ -37,13 +36,20 @@ const getBrowser = async () => {
     ],
     headless: isProduction ? chromium.headless : false,
     defaultViewport: chromium.defaultViewport,
-    ignoreHTTPSErrors: true,
-    executablePath: isProduction ? await chromium.executablePath() : undefined
+    ignoreHTTPSErrors: true
   };
+
+  // Add this for Railway configuration
+  if (isProduction) {
+    process.env.CHROME_PATH = await chromium.executablePath;
+    launchOptions.executablePath = await chromium.executablePath;
+  } else {
+    // For local development
+    launchOptions.executablePath = puppeteer.executablePath;
+  }
 
   return puppeteer.launch(launchOptions);
 };
-
 // Database functions
 async function readJobs(filters = {}) {
   try {
@@ -278,7 +284,7 @@ async function crawlShine(role, location, experience = '', maxPages = 5) {
      const browser = await puppeteer.launch({
   args: chromium.args,
   defaultViewport: chromium.defaultViewport,
-  executablePath: await chromium.executablePath,
+  executablePath:  chromium.executablePath,
   headless: chromium.headless,
 });
 
