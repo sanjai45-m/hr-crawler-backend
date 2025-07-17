@@ -17,6 +17,32 @@ puppeteer.use(StealthPlugin());
 const app = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json());
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Configure Chromium for production
+chromium.setGraphicsMode = false; // Disable GPU in production
+
+const getBrowser = async () => {
+  const launchOptions = {
+    args: [
+      ...chromium.args,
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-accelerated-2d-canvas',
+      '--no-first-run',
+      '--no-zygote',
+      '--single-process',
+      '--disable-gpu'
+    ],
+    headless: isProduction ? chromium.headless : false,
+    defaultViewport: chromium.defaultViewport,
+    ignoreHTTPSErrors: true,
+    executablePath: isProduction ? await chromium.executablePath() : undefined
+  };
+
+  return puppeteer.launch(launchOptions);
+};
 
 // Database functions
 async function readJobs(filters = {}) {
@@ -125,12 +151,7 @@ async function crawlNaukri(role, location, experience = '') {
     let browser;
     try {
         console.log(`Scraping Naukri for ${role} in ${location}...`);
-        browser = await puppeteer.launch({
-            headless: false, // Set to true in production
-              executablePath: 'C:\\Users\\Abcom\\.cache\\puppeteer\\chrome\\win64-138.0.7204.92\\chrome-win64\\chrome.exe',
-
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
-        });
+            browser = await getBrowser();
 
         const page = await browser.newPage();
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
@@ -603,40 +624,60 @@ function generateEmailHtml(jobs) {
 
 // API Routes
 app.post('/api/crawl', async (req, res) => {
-  let browser; // Declare browser here if needed
+  let browser;
   try {
     const { role, location, source = 'naukri', experience } = req.body;
 
+    // Validate input
     if (!role || !location) {
       return res.status(400).json({
         success: false,
-        error: 'Role and location are required'
+        error: 'Role and location are required fields'
       });
     }
+
+    console.log(`Starting crawl for ${role} in ${location} from ${source}`);
 
     let jobs = [];
     const startTime = Date.now();
 
+    // Route to appropriate scraper
     switch (source.toLowerCase()) {
       case 'naukri':
         jobs = await crawlNaukri(role, location, experience);
         break;
-      case 'shine':
-        jobs = await crawlShine(role, location);
-        break;
-      case 'hirist':
-        jobs = await crawlHirist(role, location);
-        break;
+      // Add cases for other sources (shine, hirist) here
       default:
         return res.status(400).json({
           success: false,
-          error: 'Invalid source. Supported sources are "naukri", "shine", and "hirist".'
+          error: 'Currently only Naukri scraping is supported in this version'
         });
     }
 
-    const { newJobs, duplicates } = await saveJobs(jobs);
+    // Save to database
+    const saveResult = await pool.query(
+      `INSERT INTO jobs 
+      (title, company, experience, location, skills, link, source, posted_date)
+      SELECT * FROM UNNEST($1::text[], $2::text[], $3::text[], $4::text[], $5::text[][], $6::text[], $7::text[], $8::timestamp[])
+      ON CONFLICT (link) DO NOTHING
+      RETURNING id`,
+      [
+        jobs.map(j => j.title),
+        jobs.map(j => j.company),
+        jobs.map(j => j.experience),
+        jobs.map(j => j.location),
+        jobs.map(j => j.skills),
+        jobs.map(j => j.link),
+        jobs.map(j => j.source),
+        jobs.map(j => new Date(j.postedDate))
+      ]
+    );
+
+    const newJobs = saveResult.rowCount;
+    const duplicates = jobs.length - newJobs;
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
 
+    // Successful response
     res.json({
       success: true,
       source,
@@ -646,23 +687,18 @@ app.post('/api/crawl', async (req, res) => {
       newJobs,
       duplicates,
       duration: `${duration} seconds`,
-      jobs: jobs.slice(0, 50)
+      jobs: jobs.slice(0, 50) // Return first 50 jobs
     });
 
   } catch (error) {
     console.error('Crawl error:', error);
     res.status(500).json({
       success: false,
-      error: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      error: 'Failed to complete crawling',
+      details: isProduction ? undefined : error.message
     });
-  } finally {
-    if (browser) {
-      await browser.close();
-    }
   }
 });
-
 app.get('/api/jobs', async (req, res) => {
   try {
     const { role, location, source, page = 1, limit = 20 } = req.query;
