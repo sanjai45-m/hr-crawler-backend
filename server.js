@@ -17,8 +17,14 @@ const puppeteer = require('puppeteer-core');
 puppeteer.use(StealthPlugin());
 const chromium = require('chrome-aws-lambda'); // for serverless like Railway
 const app = express();
-app.use(cors({ origin: '*' }));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true })); // for parsing application/x-www-form-urlencoded
+app.use(cors({ 
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 const isProduction = process.env.NODE_ENV === 'production';
 
 // Configure Chromium for production
@@ -616,6 +622,9 @@ function generateEmailHtml(jobs) {
 
 // API Routes
 app.post('/api/crawl', async (req, res) => {
+    console.log('POST /api/crawl received'); // Debug log
+  console.log('Headers:', req.headers); // Log headers
+  console.log('Body:', req.body); // Log body
   try {
     const { role, location, source = 'naukri', experience } = req.body;
 
