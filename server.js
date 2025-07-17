@@ -11,6 +11,8 @@ const { URLSearchParams } = require('url');
 const { pool, initializeDatabase } = require('./db');
 const fs = require('fs');
 const path = require('path');
+const chromium = require('@sparticuz/chromium');
+const puppeteer = require('puppeteer-core');
 // Add stealth plugin to avoid detection
 puppeteer.use(StealthPlugin());
 const chromium = require('chrome-aws-lambda'); // for serverless like Railway
@@ -22,34 +24,15 @@ const isProduction = process.env.NODE_ENV === 'production';
 // Configure Chromium for production
 // chromium.setGraphicsMode = false; // Disable GPU in production
 const getBrowser = async () => {
-  const launchOptions = {
-    args: [
-      ...chromium.args,
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--no-first-run',
-      '--no-zygote',
-      '--single-process',
-      '--disable-gpu'
-    ],
-    headless: isProduction ? chromium.headless : false,
+  return puppeteer.launch({
+    args: chromium.args,
     defaultViewport: chromium.defaultViewport,
-    ignoreHTTPSErrors: true
-  };
-
-  // Add this for Railway configuration
-  if (isProduction) {
-    process.env.CHROME_PATH = await chromium.executablePath;
-    launchOptions.executablePath = await chromium.executablePath;
-  } else {
-    // For local development
-    launchOptions.executablePath = puppeteer.executablePath;
-  }
-
-  return puppeteer.launch(launchOptions);
+    executablePath: await chromium.executablePath(),
+    headless: chromium.headless,
+    ignoreHTTPSErrors: true,
+  });
 };
+
 // Database functions
 async function readJobs(filters = {}) {
   try {
