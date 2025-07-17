@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const cheerio = require('cheerio');
-const puppeteer = require('puppeteer-extra');
+const puppeteer = require('puppeteer-extra'); // Only use puppeteer-extra
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const nodemailer = require('nodemailer');
 const userAgents = require('user-agents');
@@ -11,14 +11,14 @@ const { URLSearchParams } = require('url');
 const { pool, initializeDatabase } = require('./db');
 const fs = require('fs');
 const path = require('path');
-const chromium = require('@sparticuz/chromium');
-const puppeteer = require('puppeteer-core');
-// Add stealth plugin to avoid detection
+const chromium = require('@sparticuz/chromium'); // Use only one chromium package
+
+// Add stealth plugin
 puppeteer.use(StealthPlugin());
-const chromium = require('chrome-aws-lambda'); // for serverless like Railway
+
 const app = express();
 app.use(express.json());
-app.use(express.urlencoded({ extended: true })); // for parsing application/x-www-form-urlencoded
+app.use(express.urlencoded({ extended: true }));
 app.use(cors({ 
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -27,8 +27,7 @@ app.use(cors({
 
 const isProduction = process.env.NODE_ENV === 'production';
 
-// Configure Chromium for production
-// chromium.setGraphicsMode = false; // Disable GPU in production
+// Unified browser launcher
 const getBrowser = async () => {
   const options = {
     args: isProduction ? chromium.args : [
@@ -46,6 +45,7 @@ const getBrowser = async () => {
 
   return puppeteer.launch(options);
 };
+
 
 // Database functions
 async function readJobs(filters = {}) {

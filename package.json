@@ -11,6 +11,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@sparticuz/chromium": "^138.0.1",
     "axios": "^1.10.0",
     "cheerio": "^1.1.0",
     "chrome-aws-lambda": "^10.1.0",
