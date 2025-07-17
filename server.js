@@ -13,7 +13,7 @@ const fs = require('fs');
 const path = require('path');
 // Add stealth plugin to avoid detection
 puppeteer.use(StealthPlugin());
-
+const chromium = require('chrome-aws-lambda'); // for serverless like Railway
 const app = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json());
@@ -275,18 +275,13 @@ async function crawlShine(role, location, experience = '', maxPages = 5) {
     let browser;
     try {
         console.log(`Scraping Shine for ${role} in ${location}...`);
-        browser = await puppeteer.launch({
-            headless: false,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--no-zygote',
-                '--disable-gpu'
-            ]
-        });
+     const browser = await puppeteer.launch({
+  args: chromium.args,
+  defaultViewport: chromium.defaultViewport,
+  executablePath: await chromium.executablePath,
+  headless: chromium.headless,
+});
+
 
         const page = await browser.newPage();
         await page.setUserAgent(new userAgents({ deviceCategory: 'desktop' }).toString());
