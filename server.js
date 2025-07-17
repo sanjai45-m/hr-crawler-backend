@@ -24,13 +24,21 @@ const isProduction = process.env.NODE_ENV === 'production';
 // Configure Chromium for production
 // chromium.setGraphicsMode = false; // Disable GPU in production
 const getBrowser = async () => {
-  return puppeteer.launch({
-    args: chromium.args,
+  const options = {
+    args: isProduction ? chromium.args : [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage'
+    ],
     defaultViewport: chromium.defaultViewport,
-    executablePath: await chromium.executablePath(),
-    headless: chromium.headless,
+    executablePath: isProduction 
+      ? await chromium.executablePath() 
+      : process.env.CHROMIUM_PATH || puppeteer.executablePath(),
+    headless: isProduction ? chromium.headless : 'new',
     ignoreHTTPSErrors: true,
-  });
+  };
+
+  return puppeteer.launch(options);
 };
 
 // Database functions
