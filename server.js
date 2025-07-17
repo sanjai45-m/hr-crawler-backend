@@ -20,7 +20,7 @@ app.use(express.json());
 const isProduction = process.env.NODE_ENV === 'production';
 
 // Configure Chromium for production
-chromium.setGraphicsMode = false; // Disable GPU in production
+// chromium.setGraphicsMode = false; // Disable GPU in production
 
 const getBrowser = async () => {
   const launchOptions = {
