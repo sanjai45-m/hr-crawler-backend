@@ -221,7 +221,9 @@ async function crawlNaukri(role, location, experience = '') {
         console.error('Scraping failed:', error);
         throw error;
     } finally {
-        await browser.close();
+        if (browser) {  // Add this check
+            await browser.close();
+        }
     }
 }
 
@@ -601,6 +603,7 @@ function generateEmailHtml(jobs) {
 
 // API Routes
 app.post('/api/crawl', async (req, res) => {
+  let browser; // Declare browser here if needed
   try {
     const { role, location, source = 'naukri', experience } = req.body;
 
@@ -616,20 +619,14 @@ app.post('/api/crawl', async (req, res) => {
 
     switch (source.toLowerCase()) {
       case 'naukri':
-        console.log(`Starting Naukri crawl for ${role} in ${location}`);
         jobs = await crawlNaukri(role, location, experience);
         break;
-
       case 'shine':
-        console.log(`Starting Shine crawl for ${role} in ${location}`);
         jobs = await crawlShine(role, location);
         break;
-      
       case 'hirist':
-        console.log(`Starting Hirist crawl for ${role} in ${location}`);
         jobs = await crawlHirist(role, location);
         break;
-
       default:
         return res.status(400).json({
           success: false,
@@ -637,18 +634,17 @@ app.post('/api/crawl', async (req, res) => {
         });
     }
 
-    // Save to database
-     const { newJobs, duplicates } = await saveJobs(jobs);
+    const { newJobs, duplicates } = await saveJobs(jobs);
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
 
-   res.json({
+    res.json({
       success: true,
       source,
       role,
       location,
       totalJobs: jobs.length,
-      newJobs,       // Use the returned count
-      duplicates,    // Use the returned count
+      newJobs,
+      duplicates,
       duration: `${duration} seconds`,
       jobs: jobs.slice(0, 50)
     });
@@ -660,6 +656,10 @@ app.post('/api/crawl', async (req, res) => {
       error: error.message,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
   }
 });
 
