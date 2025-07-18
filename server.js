@@ -455,7 +455,9 @@ async function crawlShine(role, location, experience = '', maxPages = 5) {
     try {
         console.log(`Scraping Shine for ${role} in ${location}...`);
         browser = await puppeteer.launch({
-            headless: false,
+            headless: true,
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || 
+                          '/usr/bin/google-chrome-stable',
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
