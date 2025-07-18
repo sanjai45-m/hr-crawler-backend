@@ -11,39 +11,12 @@ const { URLSearchParams } = require('url');
 const { pool, initializeDatabase } = require('./db');
 const fs = require('fs');
 const path = require('path');
-
 // Add stealth plugin to avoid detection
 puppeteer.use(StealthPlugin());
 
 const app = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json());
-
-// Environment detection
-const isProduction = process.env.NODE_ENV === 'production';
-
-// Common browser launch options
-const getBrowserOptions = () => {
-  const baseOptions = {
-    headless: isProduction ? 'new' : false,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--no-first-run',
-      '--no-zygote',
-      '--disable-gpu'
-    ]
-  };
-
-  // Only set executablePath in development if specified
-  if (!isProduction && process.env.PUPPETEER_EXECUTABLE_PATH) {
-    baseOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-  }
-
-  return baseOptions;
-};
 
 // Database functions
 async function readJobs(filters = {}) {
@@ -80,7 +53,6 @@ async function readJobs(filters = {}) {
     return [];
   }
 }
-
 async function saveJobs(jobs) {
   if (!jobs || jobs.length === 0) return { newJobs: 0, duplicates: 0 };
 
@@ -124,36 +96,25 @@ async function saveJobs(jobs) {
   }
 }
 
-// Utility functions
-async function autoScroll(page) {
-  await page.evaluate(async () => {
-    await new Promise((resolve) => {
-      let totalHeight = 0;
-      const distance = 100;
-      const timer = setInterval(() => {
-        const scrollHeight = document.body.scrollHeight;
-        window.scrollBy(0, distance);
-        totalHeight += distance;
 
-        if (totalHeight >= scrollHeight - window.innerHeight) {
-          clearInterval(timer);
-          resolve();
-        }
-      }, 100);
-    });
-  });
-}
 
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
 
-// Crawler functions with updated browser launch
 async function crawlLinkedIn(role, location, experience = '', maxPages = 5) {
     let browser;
     try {
         console.log(`Scraping LinkedIn for ${role} in ${location}...`);
-        browser = await puppeteer.launch(getBrowserOptions());
+        browser = await puppeteer.launch({
+            headless: false,
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--disable-gpu'
+            ]
+        });
 
         const page = await browser.newPage();
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
@@ -166,10 +127,10 @@ async function crawlLinkedIn(role, location, experience = '', maxPages = 5) {
         searchParams.set('keywords', role);
         searchParams.set('location', location);
         if (experience) {
-            searchParams.set('f_E', experience);
+            searchParams.set('f_E', experience); // Experience filter
         }
-        searchParams.set('f_TPR', 'r86400');
-        searchParams.set('f_WT', '2');
+        searchParams.set('f_TPR', 'r86400'); // Past 24 hours
+        searchParams.set('f_WT', '2'); // On-site/remote filter
         
         const baseUrl = `https://www.linkedin.com/jobs/search?${searchParams.toString()}`;
         
@@ -188,26 +149,32 @@ async function crawlLinkedIn(role, location, experience = '', maxPages = 5) {
         while (currentPage <= maxPages) {
             console.log(`Processing page ${currentPage}/${maxPages}...`);
             
+            // Scroll to load all jobs on current page
             await autoScroll(page);
             
+            // Extract jobs from current page
             const pageJobs = await extractLinkedInJobs(page);
             allJobs = [...allJobs, ...pageJobs];
             console.log(`Found ${pageJobs.length} jobs on page ${currentPage}`);
 
+            // Break if we've reached our page limit
             if (currentPage >= maxPages) break;
 
+            // Try to go to next page
             try {
                 const nextButton = await page.$('button[aria-label="Next"]:not(:disabled)');
                 if (nextButton) {
                     console.log('Navigating to next page...');
                     await nextButton.click();
-                    await sleep(3000);
+                    await page.waitForTimeout(3000); // Wait for page transition
                     
+                    // Wait for either new jobs to load or error message
                     await Promise.race([
                         page.waitForSelector('.jobs-search__results-list li', { timeout: 10000 }),
                         page.waitForSelector('.artdeco-toast-item', { timeout: 10000 })
                     ]);
                     
+                    // Check if we hit a rate limit or error
                     const toast = await page.$('.artdeco-toast-item');
                     if (toast) {
                         console.log('Hit a LinkedIn rate limit or error');
@@ -237,21 +204,26 @@ async function crawlLinkedIn(role, location, experience = '', maxPages = 5) {
     }
 }
 
+// Separate function for LinkedIn job extraction
 async function extractLinkedInJobs(page) {
     return await page.evaluate(() => {
         const jobElements = Array.from(document.querySelectorAll('.jobs-search__results-list li'));
         return jobElements.map(job => {
             try {
+                // Title and link
                 const titleElem = job.querySelector('.base-search-card__title');
                 const title = titleElem?.textContent?.trim() || 'N/A';
                 const link = job.querySelector('a.base-card__full-link')?.href || '#';
 
+                // Company
                 const companyElem = job.querySelector('.base-search-card__subtitle a');
                 const company = companyElem?.textContent?.trim() || 'N/A';
 
+                // Location
                 const locationElem = job.querySelector('.job-search-card__location');
                 const location = locationElem?.textContent?.trim() || 'N/A';
 
+                // Posted date with enhanced parsing
                 let postedDate = 'N/A';
                 const dateElement = job.querySelector('time');
                 if (dateElement) {
@@ -281,6 +253,7 @@ async function extractLinkedInJobs(page) {
                         postedDate = now.toISOString();
                     }
                     else {
+                        // Keep original text if format not recognized
                         postedDate = dateElement.textContent.trim();
                     }
                 }
@@ -288,10 +261,10 @@ async function extractLinkedInJobs(page) {
                 return {
                     title,
                     company,
-                    experience: 'N/A',
+                    experience: 'N/A', // LinkedIn doesn't show this in list view
                     location,
-                    skills: [],
-                    salary: 'Not specified',
+                    skills: [], // Would need detail page visit
+                    salary: 'Not specified', // Would need detail page visit
                     link,
                     source: 'LinkedIn',
                     postedDate,
@@ -304,12 +277,42 @@ async function extractLinkedInJobs(page) {
         }).filter(Boolean);
     });
 }
+// Utility functions
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function autoScroll(page) {
+  await page.evaluate(async () => {
+    await new Promise((resolve) => {
+      let totalHeight = 0;
+      const distance = 100;
+      const timer = setInterval(() => {
+        const scrollHeight = document.body.scrollHeight;
+        window.scrollBy(0, distance);
+        totalHeight += distance;
+
+        if (totalHeight >= scrollHeight - window.innerHeight) {
+          clearInterval(timer);
+          resolve();
+        }
+      }, 100);
+    });
+  });
+}
+
+// Utility functions
 
 async function crawlNaukri(role, location, experience = '') {
     let browser;
     try {
         console.log(`Scraping Naukri for ${role} in ${location}...`);
-        browser = await puppeteer.launch(getBrowserOptions());
+        browser = await puppeteer.launch({
+            headless: true, // Set to true in production
+              // executablePath: 'C:\\Users\\Abcom\\.cache\\puppeteer\\chrome\\win64-138.0.7204.92\\chrome-win64\\chrome.exe',
+
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
+        });
 
         const page = await browser.newPage();
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
@@ -317,9 +320,11 @@ async function crawlNaukri(role, location, experience = '') {
             'Accept-Language': 'en-US,en;q=0.9',
         });
 
+        // Build the initial URL
         const baseUrl = `https://www.naukri.com/${role.toLowerCase().replace(/\s+/g, '-')}-jobs-in-${location.toLowerCase().replace(/\s+/g, '-')}`;
         let url = baseUrl;
 
+        // Add experience filter if specified
         if (experience) {
             url += `?experience=${experience}`;
         }
@@ -330,6 +335,7 @@ async function crawlNaukri(role, location, experience = '') {
             timeout: 60000
         });
 
+        // Handle popups
         try {
             await page.click('span[class*="crossIcon"]', { timeout: 5000 });
             console.log('Closed popup');
@@ -337,51 +343,57 @@ async function crawlNaukri(role, location, experience = '') {
             console.log('No popup found');
         }
 
+        // Function to extract jobs from current page
         const extractJobs = async () => {
-            return await page.evaluate(() => {
-                const jobElements = Array.from(document.querySelectorAll('.srp-jobtuple-wrapper'));
-                return jobElements.map(job => {
-                    const title = job.querySelector('.title')?.textContent?.trim() || 'N/A';
-                    const company = job.querySelector('.comp-name')?.textContent?.trim() || 'N/A';
-                    const experience = job.querySelector('.expwdth')?.textContent?.trim() || 'N/A';
-                    const location = job.querySelector('.locWdth')?.textContent?.trim() || 'N/A';
-                    const skills = Array.from(job.querySelectorAll('.tags-gt li')).map(li => li.textContent.trim());
-                    const link = job.querySelector('a.title')?.href || '#';
-                    
-                    const dateElement = job.querySelector('.job-post-day');
-                    let postedDate = 'N/A';
-                    
-                    if (dateElement) {
-                        postedDate = dateElement.textContent.trim();
-                        postedDate = postedDate.replace(/Posted|ago|\n/g, '').trim();
-                    }
+    return await page.evaluate(() => {
+        const jobElements = Array.from(document.querySelectorAll('.srp-jobtuple-wrapper'));
+        return jobElements.map(job => {
+            const title = job.querySelector('.title')?.textContent?.trim() || 'N/A';
+            const company = job.querySelector('.comp-name')?.textContent?.trim() || 'N/A';
+            const experience = job.querySelector('.expwdth')?.textContent?.trim() || 'N/A';
+            const location = job.querySelector('.locWdth')?.textContent?.trim() || 'N/A';
+            const skills = Array.from(job.querySelectorAll('.tags-gt li')).map(li => li.textContent.trim());
+            const link = job.querySelector('a.title')?.href || '#';
+            
+            // Extract job post date - this is the new addition
+            const dateElement = job.querySelector('.job-post-day');
+            let postedDate = 'N/A';
+            
+            if (dateElement) {
+                postedDate = dateElement.textContent.trim();
+                // You might want to clean this up further
+                postedDate = postedDate.replace(/Posted|ago|\n/g, '').trim();
+            }
 
-                    return { 
-                        title, 
-                        company, 
-                        experience, 
-                        location, 
-                        skills, 
-                        link,
-                        postedDate
-                    };
-                });
-            });
-        };
+            return { 
+                title, 
+                company, 
+                experience, 
+                location, 
+                skills, 
+                link,
+                postedDate  // Add the posted date to the returned object
+            };
+        });
+    });
+};
 
         let allJobs = [];
         let currentPage = 1;
-        const maxPages = 10;
+        const maxPages = 10; // Limit to prevent infinite scraping
 
         while (currentPage <= maxPages) {
             console.log(`Scraping page ${currentPage}...`);
 
+            // Wait for jobs to load
             await page.waitForSelector('.srp-jobtuple-wrapper', { timeout: 30000 });
 
+            // Extract jobs from current page
             const pageJobs = await extractJobs();
             allJobs = [...allJobs, ...pageJobs];
             console.log(`Found ${pageJobs.length} jobs on page ${currentPage}`);
 
+            // Try to go to next page
             try {
                 const nextPageUrl = `${baseUrl}-${currentPage + 1}${experience ? `?experience=${experience}` : ''}`;
                 await page.goto(nextPageUrl, {
@@ -396,27 +408,64 @@ async function crawlNaukri(role, location, experience = '') {
         }
 
         console.log(`Total jobs found: ${allJobs.length}`);
-        return allJobs.map(job => ({
-            ...job,
-            salary: 'Not specified',
-            source: 'Naukri',
-            scrapedDate: new Date().toISOString()
-        }));
+
+        // Save to JSON
+        // const dir = './data';
+        // if (!fs.existsSync(dir)) {
+        //     fs.mkdirSync(dir);
+        // }
+        // fs.writeFileSync(path.join(dir, 'jobs.json'), JSON.stringify(allJobs, null, 2));
+
+        return allJobs;
     } catch (error) {
         console.error('Scraping failed:', error);
         throw error;
     } finally {
-        if (browser) {
+        if (browser) {  // Add this check
             await browser.close();
         }
     }
 }
 
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+async function autoScroll(page) {
+    await page.evaluate(async () => {
+        await new Promise((resolve) => {
+            let totalHeight = 0;
+            const distance = 100;
+            const timer = setInterval(() => {
+                const scrollHeight = document.body.scrollHeight;
+                window.scrollBy(0, distance);
+                totalHeight += distance;
+
+                if (totalHeight >= scrollHeight - window.innerHeight) {
+                    clearInterval(timer);
+                    resolve();
+                }
+            }, 100);
+        });
+    });
+}
+
+
 async function crawlShine(role, location, experience = '', maxPages = 5) {
     let browser;
     try {
         console.log(`Scraping Shine for ${role} in ${location}...`);
-        browser = await puppeteer.launch(getBrowserOptions());
+        browser = await puppeteer.launch({
+            headless: false,
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--disable-gpu'
+            ]
+        });
 
         const page = await browser.newPage();
         await page.setUserAgent(new userAgents({ deviceCategory: 'desktop' }).toString());
@@ -424,6 +473,7 @@ async function crawlShine(role, location, experience = '', maxPages = 5) {
             'Accept-Language': 'en-US,en;q=0.9',
         });
 
+        // Build base URL
         const searchQuery = role.toLowerCase().replace(/\s+/g, '-');
         const locationQuery = location.toLowerCase().replace(/\s+/g, '-');
         let baseUrl = `https://www.shine.com/job-search/${searchQuery}-jobs-in-${locationQuery}`;
@@ -444,6 +494,11 @@ async function crawlShine(role, location, experience = '', maxPages = 5) {
                 timeout: 60000
             });
 
+            // Debug: Take screenshot
+            await page.screenshot({ path: `shine-page-${currentPage}.png` });
+            console.log(`Took screenshot: shine-page-${currentPage}.png`);
+
+            // Wait for either jobs to load or "no jobs" message
             try {
                 await Promise.race([
                     page.waitForSelector('.jdbigCard.jobCardNova_bigCard__W2xn3', { timeout: 15000 }),
@@ -453,14 +508,17 @@ async function crawlShine(role, location, experience = '', maxPages = 5) {
                 console.log('Neither jobs nor "no jobs" message found within timeout');
             }
 
+            // Check if "no jobs" message exists
             const noJobsFound = await page.$('.noJobFoundContainer__noJobFoundWrapper__9Hv0O');
             if (noJobsFound) {
                 console.log('No more jobs found');
                 break;
             }
 
+            // Scroll to load more jobs (if lazy-loaded)
             await autoScroll(page);
 
+            // Extract jobs from current page
             const pageJobs = await extractShineJobs(page);
             if (pageJobs.length === 0) {
                 console.log('No jobs found on this page');
@@ -485,19 +543,23 @@ async function crawlShine(role, location, experience = '', maxPages = 5) {
     }
 }
 
+// Separate function for job extraction
 async function extractShineJobs(page) {
     return await page.evaluate(() => {
         const jobElements = Array.from(document.querySelectorAll('.jdbigCard.jobCardNova_bigCard__W2xn3'));
         return jobElements.map(job => {
             try {
+                // Title and link
                 const titleElem = job.querySelector('.jobCardNova_bigCardTopTitleHeading__Rj2sC a');
                 const title = titleElem?.textContent?.trim() || 'N/A';
                 const link = titleElem?.href || '#';
 
+                // Company
                 const companyElem = job.querySelector('.jobCardNova_bigCardTopTitle__vLLav + span') ||
                                     job.querySelector('.jobCardNova_bigCardTopTitle__vLLav span');
                 const company = companyElem?.textContent?.trim() || 'N/A';
 
+                // Experience, Location, Salary
                 const detailSpans = job.querySelectorAll('.jobCardNova_bigCardBottom__uVExC span');
                 let experience = 'N/A';
                 let location = 'N/A';
@@ -509,6 +571,7 @@ async function extractShineJobs(page) {
                     salary = detailSpans[2]?.textContent?.trim() || 'Not specified';
                 }
 
+                // Posted Date using partial class match
                 let postedDate = 'N/A';
                 const dateElement = job.querySelector('span[class*="jobCardNova_postedData"]');
 
@@ -552,11 +615,37 @@ async function extractShineJobs(page) {
     });
 }
 
+
+// Auto-scroll function
+async function autoScroll(page) {
+    await page.evaluate(async () => {
+        await new Promise((resolve) => {
+            let totalHeight = 0;
+            const distance = 300;
+            const timer = setInterval(() => {
+                const scrollHeight = document.body.scrollHeight;
+                window.scrollBy(0, distance);
+                totalHeight += distance;
+
+                if (totalHeight >= scrollHeight - window.innerHeight) {
+                    clearInterval(timer);
+                    resolve();
+                }
+            }, 200);
+        });
+    });
+}
+
 async function crawlHirist(role, location, minExp = '', maxExp = '') {
+    const puppeteer = require('puppeteer');
     let browser;
+
     try {
         console.log(`Scraping Hirist.tech for ${role} in ${location}...`);
-        browser = await puppeteer.launch(getBrowserOptions());
+        browser = await puppeteer.launch({
+            headless: false,
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
+        });
 
         const page = await browser.newPage();
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
@@ -575,6 +664,7 @@ async function crawlHirist(role, location, minExp = '', maxExp = '') {
             timeout: 60000
         });
 
+        // Scroll until 100+ jobs loaded
         const targetCount = 100;
         let prevCount = 0;
 
@@ -594,61 +684,66 @@ async function crawlHirist(role, location, minExp = '', maxExp = '') {
 
             prevCount = count;
             await autoScroll(page);
-            await sleep(1000);
+            await page.waitForTimeout(1000);
         }
 
-        const allJobs = await page.evaluate(() => {
-            const jobElements = Array.from(document.querySelectorAll('.MuiBox-root.mui-style-1ancegk'));
+        // Extract job data
+        const extractJobs = async () => {
+            return await page.evaluate(() => {
+                const jobElements = Array.from(document.querySelectorAll('.MuiBox-root.mui-style-1ancegk'));
 
-            return jobElements.map(job => {
-                const titleElement = job.querySelector('[data-testid="job_title"]');
-                const title = titleElement?.textContent?.trim() || 'N/A';
-                const link = titleElement?.closest('a')?.href || '#';
+                return jobElements.map(job => {
+                    const titleElement = job.querySelector('[data-testid="job_title"]');
+                    const title = titleElement?.textContent?.trim() || 'N/A';
+                    const link = titleElement?.closest('a')?.href || '#';
 
-                const company = job.querySelector('.MuiTypography-subtitle1')?.textContent?.trim() || 'N/A';
-                const experience = job.querySelector('[data-testid="job_experience"]')?.textContent?.trim() || 'N/A';
-                const location = job.querySelector('[data-testid="job_location"]')?.textContent?.trim() || 'N/A';
-                const salary = job.querySelector('.MuiTypography-root.mui-style-1n4cg6k')?.textContent?.trim() || 'Not specified';
+                    const company = job.querySelector('.MuiTypography-subtitle1')?.textContent?.trim() || 'N/A';
+                    const experience = job.querySelector('[data-testid="job_experience"]')?.textContent?.trim() || 'N/A';
+                    const location = job.querySelector('[data-testid="job_location"]')?.textContent?.trim() || 'N/A';
+                    const salary = job.querySelector('.MuiTypography-root.mui-style-1n4cg6k')?.textContent?.trim() || 'Not specified';
 
-                const skillsElement = job.querySelector('.MuiBox-root.mui-style-1u0q1tk');
-                const skills = skillsElement ? 
-                    Array.from(skillsElement.querySelectorAll('span')).map(span => span.textContent.trim()) : [];
+                    const skillsElement = job.querySelector('.MuiBox-root.mui-style-1u0q1tk');
+                    const skills = skillsElement ? 
+                        Array.from(skillsElement.querySelectorAll('span')).map(span => span.textContent.trim()) : [];
 
-                let postedDate = 'N/A';
-                const dateText = job.querySelector('[data-testid="job_posting_date"]')?.textContent || '';
-                const relative = dateText.toLowerCase();
+                    // Extract and parse posted date
+                    let postedDate = 'N/A';
+                    const dateText = job.querySelector('[data-testid="job_posting_date"]')?.textContent || '';
+                    const relative = dateText.toLowerCase();
 
-                const now = new Date();
-                const days = relative.match(/(\d+)\s+day/);
-                const weeks = relative.match(/(\d+)\s+week/);
-                const hours = relative.match(/(\d+)\s+hour/);
-                const minutes = relative.match(/(\d+)\s+minute/);
+                    const now = new Date();
+                    const days = relative.match(/(\d+)\s+day/);
+                    const weeks = relative.match(/(\d+)\s+week/);
+                    const hours = relative.match(/(\d+)\s+hour/);
+                    const minutes = relative.match(/(\d+)\s+minute/);
 
-                if (days) {
-                    now.setDate(now.getDate() - parseInt(days[1]));
-                    postedDate = now.toISOString().split('T')[0];
-                } else if (weeks) {
-                    now.setDate(now.getDate() - parseInt(weeks[1]) * 7);
-                    postedDate = now.toISOString().split('T')[0];
-                } else if (hours || minutes) {
-                    postedDate = now.toISOString().split('T')[0];
-                }
+                    if (days) {
+                        now.setDate(now.getDate() - parseInt(days[1]));
+                        postedDate = now.toISOString().split('T')[0];
+                    } else if (weeks) {
+                        now.setDate(now.getDate() - parseInt(weeks[1]) * 7);
+                        postedDate = now.toISOString().split('T')[0];
+                    } else if (hours || minutes) {
+                        postedDate = now.toISOString().split('T')[0];
+                    }
 
-                return { 
-                    title, 
-                    company, 
-                    experience, 
-                    location, 
-                    skills, 
-                    salary,
-                    link,
-                    source: 'Hirist.tech',
-                    postedDate,
-                    scrapedDate: new Date().toISOString()
-                };
+                    return { 
+                        title, 
+                        company, 
+                        experience, 
+                        location, 
+                        skills, 
+                        salary,
+                        link,
+                        source: 'Hirist.tech',
+                        postedDate,
+                        scrapedDate: new Date().toISOString()
+                    };
+                });
             });
-        });
+        };
 
+        const allJobs = await extractJobs();
         console.log(`Extracted ${allJobs.length} jobs.`);
         return allJobs;
 
@@ -660,6 +755,28 @@ async function crawlHirist(role, location, minExp = '', maxExp = '') {
     }
 }
 
+
+// Updated autoScroll function without waitForTimeout
+async function autoScroll(page) {
+    await page.evaluate(async () => {
+        await new Promise((resolve) => {
+            let totalHeight = 0;
+            const distance = 100;
+            const timer = setInterval(() => {
+                const scrollHeight = document.body.scrollHeight;
+                window.scrollBy(0, distance);
+                totalHeight += distance;
+
+                if (totalHeight >= scrollHeight - window.innerHeight) {
+                    clearInterval(timer);
+                    resolve();
+                }
+            }, 100);
+        });
+    });
+    // Replace waitForTimeout with traditional setTimeout
+    await new Promise(resolve => setTimeout(resolve, 1000));
+}
 // Email functions
 async function sendEmailAlert(email, jobs) {
   try {
@@ -715,6 +832,7 @@ function generateEmailHtml(jobs) {
 
 // API Routes
 app.post('/api/crawl', async (req, res) => {
+  let browser; // Declare browser here if needed
   try {
     const { role, location, source = 'naukri', experience } = req.body;
 
@@ -744,7 +862,7 @@ app.post('/api/crawl', async (req, res) => {
       default:
         return res.status(400).json({
           success: false,
-          error: 'Invalid source. Supported sources are "naukri", "shine", "hirist", and "linkedin".'
+          error: 'Invalid source. Supported sources are "naukri", "shine", and "hirist".'
         });
     }
 
@@ -770,6 +888,10 @@ app.post('/api/crawl', async (req, res) => {
       error: error.message,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
   }
 });
 
@@ -778,6 +900,7 @@ app.get('/api/jobs', async (req, res) => {
     const { role, location, source, page = 1, limit = 20 } = req.query;
     const offset = (page - 1) * limit;
     
+    // Build the query dynamically based on filters
     let query = 'SELECT * FROM jobs';
     const queryParams = [];
     const whereClauses = [];
@@ -801,11 +924,14 @@ app.get('/api/jobs', async (req, res) => {
       query += ' WHERE ' + whereClauses.join(' AND ');
     }
     
+    // Add pagination
     query += ` ORDER BY posted_date DESC LIMIT ${limit} OFFSET ${offset}`;
     
+    // Get jobs
     const jobsResult = await pool.query(query, queryParams);
     const jobs = jobsResult.rows;
     
+    // Get total count for pagination
     let countQuery = 'SELECT COUNT(*) FROM jobs';
     if (whereClauses.length > 0) {
       countQuery += ' WHERE ' + whereClauses.join(' AND ');
@@ -837,6 +963,7 @@ app.post('/api/alert', async (req, res) => {
       });
     }
 
+    // Build query for jobs from last 24 hours
     let query = `
       SELECT * FROM jobs 
       WHERE posted_date >= NOW() - INTERVAL '24 HOURS'
@@ -893,6 +1020,7 @@ app.post('/api/alert', async (req, res) => {
 
 app.get('/health', async (req, res) => {
   try {
+    // Test database connection
     const dbResult = await pool.query('SELECT COUNT(*) FROM jobs');
     const jobCount = parseInt(dbResult.rows[0].count);
     
@@ -911,18 +1039,21 @@ app.get('/health', async (req, res) => {
     });
   }
 });
-
 app.get('/api/verify-db', async (req, res) => {
   try {
+    // Check connection
     await pool.query('SELECT 1');
     
+    // Check table exists
     const tableExists = await pool.query(
       "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'jobs')"
     );
     
+    // Check row count
     const countResult = await pool.query('SELECT COUNT(*) FROM jobs');
     const jobCount = parseInt(countResult.rows[0].count);
     
+    // Check unique constraint
     const constraints = await pool.query(`
       SELECT conname FROM pg_constraint 
       WHERE conrelid = 'jobs'::regclass AND contype = 'u'
@@ -942,7 +1073,6 @@ app.get('/api/verify-db', async (req, res) => {
     });
   }
 });
-
 // Initialize database and start server
 initializeDatabase().then(() => {
   const PORT = process.env.PORT || 5000;
@@ -952,6 +1082,7 @@ initializeDatabase().then(() => {
     console.log(`Jobs stored in PostgreSQL (Neon)`);
   });
 
+  // Handle shutdown gracefully
   process.on('SIGTERM', () => {
     console.log('SIGTERM received. Shutting down gracefully...');
     server.close(() => {
