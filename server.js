@@ -104,16 +104,25 @@ async function crawlLinkedIn(role, location, experience = '', maxPages = 5) {
     try {
         console.log(`Scraping LinkedIn for ${role} in ${location}...`);
         browser = await puppeteer.launch({
-            headless: false,
+            headless: "new",
             args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--no-zygote',
-                '--disable-gpu'
-            ]
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-accelerated-2d-canvas',
+    '--no-first-run',
+    '--no-zygote',
+    '--disable-gpu',
+    '--single-process', // Runs in single process mode
+    '--disable-extensions',
+    '--disable-software-rasterizer',
+    '--disable-setuid-sandbox',
+    '--disable-background-timer-throttling',
+    '--disable-backgrounding-occluded-windows',
+    '--disable-renderer-backgrounding'
+  ],
+  ignoreHTTPSErrors: true,
+  defaultViewport: null
         });
 
         const page = await browser.newPage();
@@ -308,10 +317,26 @@ async function crawlNaukri(role, location, experience = '') {
     try {
         console.log(`Scraping Naukri for ${role} in ${location}...`);
         browser = await puppeteer.launch({
-            headless: true, // Set to true in production
+            headless: "new", // Set to true in production
               // executablePath: 'C:\\Users\\Abcom\\.cache\\puppeteer\\chrome\\win64-138.0.7204.92\\chrome-win64\\chrome.exe',
 
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            args: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-accelerated-2d-canvas',
+    '--no-first-run',
+    '--no-zygote',
+    '--disable-gpu',
+    '--single-process', // Runs in single process mode
+    '--disable-extensions',
+    '--disable-software-rasterizer',
+    '--disable-setuid-sandbox',
+    '--disable-background-timer-throttling',
+    '--disable-backgrounding-occluded-windows',
+    '--disable-renderer-backgrounding'
+  ],  ignoreHTTPSErrors: true,
+  defaultViewport: null
         });
 
         const page = await browser.newPage();
@@ -455,18 +480,27 @@ async function crawlShine(role, location, experience = '', maxPages = 5) {
     try {
         console.log(`Scraping Shine for ${role} in ${location}...`);
         browser = await puppeteer.launch({
-            headless: true,
-            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || 
-                          '/usr/bin/google-chrome-stable',
+            headless: "new",
+            // executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || 
+            //               '/usr/bin/google-chrome-stable',
             args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--no-zygote',
-                '--disable-gpu'
-            ]
+               '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-accelerated-2d-canvas',
+    '--no-first-run',
+    '--no-zygote',
+    '--disable-gpu',
+    '--single-process', // Runs in single process mode
+    '--disable-extensions',
+    '--disable-software-rasterizer',
+    '--disable-setuid-sandbox',
+    '--disable-background-timer-throttling',
+    '--disable-backgrounding-occluded-windows',
+    '--disable-renderer-backgrounding'
+            ],
+  ignoreHTTPSErrors: true,
+  defaultViewport: null
         });
 
         const page = await browser.newPage();
@@ -645,9 +679,24 @@ async function crawlHirist(role, location, minExp = '', maxExp = '') {
     try {
         console.log(`Scraping Hirist.tech for ${role} in ${location}...`);
         browser = await puppeteer.launch({
-            headless: false,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
-        });
+            headless: "new",
+ args: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-accelerated-2d-canvas',
+    '--no-first-run',
+    '--no-zygote',
+    '--disable-gpu',
+    '--single-process', // Runs in single process mode
+    '--disable-extensions',
+    '--disable-software-rasterizer',
+    '--disable-setuid-sandbox',
+    '--disable-background-timer-throttling',
+    '--disable-backgrounding-occluded-windows',
+    '--disable-renderer-backgrounding'
+  ]  ,   ignoreHTTPSErrors: true,
+  defaultViewport: null    });
 
         const page = await browser.newPage();
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
