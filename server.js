@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const cheerio = require('cheerio');
-const puppeteer = require('puppeteer-extra'); // Only use puppeteer-extra
+const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const nodemailer = require('nodemailer');
 const userAgents = require('user-agents');
@@ -11,41 +11,12 @@ const { URLSearchParams } = require('url');
 const { pool, initializeDatabase } = require('./db');
 const fs = require('fs');
 const path = require('path');
-const chromium = require('@sparticuz/chromium'); // Use only one chromium package
-
-// Add stealth plugin
+// Add stealth plugin to avoid detection
 puppeteer.use(StealthPlugin());
 
 const app = express();
+app.use(cors({ origin: '*' }));
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(cors({ 
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
-const isProduction = process.env.NODE_ENV === 'production';
-
-// Unified browser launcher
-const getBrowser = async () => {
-  const options = {
-    args: isProduction ? chromium.args : [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage'
-    ],
-    defaultViewport: chromium.defaultViewport,
-    executablePath: isProduction 
-      ? await chromium.executablePath() 
-      : process.env.CHROMIUM_PATH || puppeteer.executablePath(),
-    headless: isProduction ? chromium.headless : 'new',
-    ignoreHTTPSErrors: true,
-  };
-
-  return puppeteer.launch(options);
-};
-
 
 // Database functions
 async function readJobs(filters = {}) {
@@ -124,6 +95,188 @@ async function saveJobs(jobs) {
     client.release();
   }
 }
+
+
+
+
+async function crawlLinkedIn(role, location, experience = '', maxPages = 5) {
+    let browser;
+    try {
+        console.log(`Scraping LinkedIn for ${role} in ${location}...`);
+        browser = await puppeteer.launch({
+            headless: false,
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--disable-gpu'
+            ]
+        });
+
+        const page = await browser.newPage();
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+        await page.setExtraHTTPHeaders({
+            'Accept-Language': 'en-US,en;q=0.9',
+        });
+
+        // Build search URL
+        const searchParams = new URLSearchParams();
+        searchParams.set('keywords', role);
+        searchParams.set('location', location);
+        if (experience) {
+            searchParams.set('f_E', experience); // Experience filter
+        }
+        searchParams.set('f_TPR', 'r86400'); // Past 24 hours
+        searchParams.set('f_WT', '2'); // On-site/remote filter
+        
+        const baseUrl = `https://www.linkedin.com/jobs/search?${searchParams.toString()}`;
+        
+        console.log(`Navigating to: ${baseUrl}`);
+        await page.goto(baseUrl, {
+            waitUntil: 'domcontentloaded',
+            timeout: 60000
+        });
+
+        // Wait for jobs to load
+        await page.waitForSelector('.jobs-search__results-list', { timeout: 30000 });
+
+        let allJobs = [];
+        let currentPage = 1;
+
+        while (currentPage <= maxPages) {
+            console.log(`Processing page ${currentPage}/${maxPages}...`);
+            
+            // Scroll to load all jobs on current page
+            await autoScroll(page);
+            
+            // Extract jobs from current page
+            const pageJobs = await extractLinkedInJobs(page);
+            allJobs = [...allJobs, ...pageJobs];
+            console.log(`Found ${pageJobs.length} jobs on page ${currentPage}`);
+
+            // Break if we've reached our page limit
+            if (currentPage >= maxPages) break;
+
+            // Try to go to next page
+            try {
+                const nextButton = await page.$('button[aria-label="Next"]:not(:disabled)');
+                if (nextButton) {
+                    console.log('Navigating to next page...');
+                    await nextButton.click();
+                    await page.waitForTimeout(3000); // Wait for page transition
+                    
+                    // Wait for either new jobs to load or error message
+                    await Promise.race([
+                        page.waitForSelector('.jobs-search__results-list li', { timeout: 10000 }),
+                        page.waitForSelector('.artdeco-toast-item', { timeout: 10000 })
+                    ]);
+                    
+                    // Check if we hit a rate limit or error
+                    const toast = await page.$('.artdeco-toast-item');
+                    if (toast) {
+                        console.log('Hit a LinkedIn rate limit or error');
+                        break;
+                    }
+                    
+                    currentPage++;
+                } else {
+                    console.log('No more pages available');
+                    break;
+                }
+            } catch (e) {
+                console.log('Failed to navigate to next page:', e);
+                break;
+            }
+        }
+
+        console.log(`Total jobs found from LinkedIn: ${allJobs.length}`);
+        return allJobs;
+    } catch (error) {
+        console.error('LinkedIn scraping failed:', error);
+        throw error;
+    } finally {
+        if (browser) {
+            await browser.close();
+        }
+    }
+}
+
+// Separate function for LinkedIn job extraction
+async function extractLinkedInJobs(page) {
+    return await page.evaluate(() => {
+        const jobElements = Array.from(document.querySelectorAll('.jobs-search__results-list li'));
+        return jobElements.map(job => {
+            try {
+                // Title and link
+                const titleElem = job.querySelector('.base-search-card__title');
+                const title = titleElem?.textContent?.trim() || 'N/A';
+                const link = job.querySelector('a.base-card__full-link')?.href || '#';
+
+                // Company
+                const companyElem = job.querySelector('.base-search-card__subtitle a');
+                const company = companyElem?.textContent?.trim() || 'N/A';
+
+                // Location
+                const locationElem = job.querySelector('.job-search-card__location');
+                const location = locationElem?.textContent?.trim() || 'N/A';
+
+                // Posted date with enhanced parsing
+                let postedDate = 'N/A';
+                const dateElement = job.querySelector('time');
+                if (dateElement) {
+                    postedDate = dateElement.textContent.trim().toLowerCase();
+                    
+                    const now = new Date();
+                    const num = parseInt(postedDate) || 1;
+                    
+                    if (postedDate.includes('hour')) {
+                        now.setHours(now.getHours() - num);
+                        postedDate = now.toISOString();
+                    } 
+                    else if (postedDate.includes('day')) {
+                        now.setDate(now.getDate() - num);
+                        postedDate = now.toISOString().split('T')[0];
+                    }
+                    else if (postedDate.includes('week')) {
+                        now.setDate(now.getDate() - (num * 7));
+                        postedDate = now.toISOString().split('T')[0];
+                    }
+                    else if (postedDate.includes('month')) {
+                        now.setMonth(now.getMonth() - num);
+                        postedDate = now.toISOString().split('T')[0];
+                    }
+                    else if (postedDate.includes('minute')) {
+                        now.setMinutes(now.getMinutes() - num);
+                        postedDate = now.toISOString();
+                    }
+                    else {
+                        // Keep original text if format not recognized
+                        postedDate = dateElement.textContent.trim();
+                    }
+                }
+
+                return {
+                    title,
+                    company,
+                    experience: 'N/A', // LinkedIn doesn't show this in list view
+                    location,
+                    skills: [], // Would need detail page visit
+                    salary: 'Not specified', // Would need detail page visit
+                    link,
+                    source: 'LinkedIn',
+                    postedDate,
+                    scrapedDate: new Date().toISOString()
+                };
+            } catch (err) {
+                console.error('Error extracting job:', err);
+                return null;
+            }
+        }).filter(Boolean);
+    });
+}
 // Utility functions
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -154,7 +307,12 @@ async function crawlNaukri(role, location, experience = '') {
     let browser;
     try {
         console.log(`Scraping Naukri for ${role} in ${location}...`);
-            browser = await getBrowser();
+        browser = await puppeteer.launch({
+            headless: false, // Set to true in production
+              executablePath: 'C:\\Users\\Abcom\\.cache\\puppeteer\\chrome\\win64-138.0.7204.92\\chrome-win64\\chrome.exe',
+
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
+        });
 
         const page = await browser.newPage();
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
@@ -187,20 +345,38 @@ async function crawlNaukri(role, location, experience = '') {
 
         // Function to extract jobs from current page
         const extractJobs = async () => {
-            return await page.evaluate(() => {
-                const jobElements = Array.from(document.querySelectorAll('.srp-jobtuple-wrapper'));
-                return jobElements.map(job => {
-                    const title = job.querySelector('.title')?.textContent?.trim() || 'N/A';
-                    const company = job.querySelector('.comp-name')?.textContent?.trim() || 'N/A';
-                    const experience = job.querySelector('.expwdth')?.textContent?.trim() || 'N/A';
-                    const location = job.querySelector('.locWdth')?.textContent?.trim() || 'N/A';
-                    const skills = Array.from(job.querySelectorAll('.tags-gt li')).map(li => li.textContent.trim());
-                    const link = job.querySelector('a.title')?.href || '#';
+    return await page.evaluate(() => {
+        const jobElements = Array.from(document.querySelectorAll('.srp-jobtuple-wrapper'));
+        return jobElements.map(job => {
+            const title = job.querySelector('.title')?.textContent?.trim() || 'N/A';
+            const company = job.querySelector('.comp-name')?.textContent?.trim() || 'N/A';
+            const experience = job.querySelector('.expwdth')?.textContent?.trim() || 'N/A';
+            const location = job.querySelector('.locWdth')?.textContent?.trim() || 'N/A';
+            const skills = Array.from(job.querySelectorAll('.tags-gt li')).map(li => li.textContent.trim());
+            const link = job.querySelector('a.title')?.href || '#';
+            
+            // Extract job post date - this is the new addition
+            const dateElement = job.querySelector('.job-post-day');
+            let postedDate = 'N/A';
+            
+            if (dateElement) {
+                postedDate = dateElement.textContent.trim();
+                // You might want to clean this up further
+                postedDate = postedDate.replace(/Posted|ago|\n/g, '').trim();
+            }
 
-                    return { title, company, experience, location, skills, link };
-                });
-            });
-        };
+            return { 
+                title, 
+                company, 
+                experience, 
+                location, 
+                skills, 
+                link,
+                postedDate  // Add the posted date to the returned object
+            };
+        });
+    });
+};
 
         let allJobs = [];
         let currentPage = 1;
@@ -278,13 +454,18 @@ async function crawlShine(role, location, experience = '', maxPages = 5) {
     let browser;
     try {
         console.log(`Scraping Shine for ${role} in ${location}...`);
-     const browser = await puppeteer.launch({
-  args: chromium.args,
-  defaultViewport: chromium.defaultViewport,
-  executablePath:  chromium.executablePath,
-  headless: chromium.headless,
-});
-
+        browser = await puppeteer.launch({
+            headless: false,
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--no-first-run',
+                '--no-zygote',
+                '--disable-gpu'
+            ]
+        });
 
         const page = await browser.newPage();
         await page.setUserAgent(new userAgents({ deviceCategory: 'desktop' }).toString());
@@ -368,14 +549,17 @@ async function extractShineJobs(page) {
         const jobElements = Array.from(document.querySelectorAll('.jdbigCard.jobCardNova_bigCard__W2xn3'));
         return jobElements.map(job => {
             try {
+                // Title and link
                 const titleElem = job.querySelector('.jobCardNova_bigCardTopTitleHeading__Rj2sC a');
                 const title = titleElem?.textContent?.trim() || 'N/A';
                 const link = titleElem?.href || '#';
 
-                const companyElem = job.querySelector('.jobCardNova_bigCardTopTitle__vLLav + span') || 
+                // Company
+                const companyElem = job.querySelector('.jobCardNova_bigCardTopTitle__vLLav + span') ||
                                     job.querySelector('.jobCardNova_bigCardTopTitle__vLLav span');
                 const company = companyElem?.textContent?.trim() || 'N/A';
 
+                // Experience, Location, Salary
                 const detailSpans = job.querySelectorAll('.jobCardNova_bigCardBottom__uVExC span');
                 let experience = 'N/A';
                 let location = 'N/A';
@@ -387,6 +571,31 @@ async function extractShineJobs(page) {
                     salary = detailSpans[2]?.textContent?.trim() || 'Not specified';
                 }
 
+                // Posted Date using partial class match
+                let postedDate = 'N/A';
+                const dateElement = job.querySelector('span[class*="jobCardNova_postedData"]');
+
+                if (dateElement) {
+                    postedDate = dateElement.textContent.trim();
+                    postedDate = postedDate.replace(/posted|Posted|ago|\n/g, '').trim();
+
+                    const now = new Date();
+                    const daysMatch = postedDate.match(/(\d+)\s+day/);
+                    const weeksMatch = postedDate.match(/(\d+)\s+week/);
+                    const hoursMatch = postedDate.match(/(\d+)\s+hour/);
+                    const minutesMatch = postedDate.match(/(\d+)\s+minute/);
+
+                    if (daysMatch) {
+                        now.setDate(now.getDate() - parseInt(daysMatch[1]));
+                        postedDate = now.toISOString().split('T')[0];
+                    } else if (weeksMatch) {
+                        now.setDate(now.getDate() - parseInt(weeksMatch[1]) * 7);
+                        postedDate = now.toISOString().split('T')[0];
+                    } else if (hoursMatch || minutesMatch) {
+                        postedDate = now.toISOString().split('T')[0];
+                    }
+                }
+
                 return {
                     title,
                     company,
@@ -395,7 +604,8 @@ async function extractShineJobs(page) {
                     salary,
                     link,
                     source: 'Shine',
-                    postedDate: new Date().toISOString()
+                    postedDate,
+                    scrapedDate: new Date().toISOString()
                 };
             } catch (err) {
                 console.error('Error extracting job:', err);
@@ -404,6 +614,7 @@ async function extractShineJobs(page) {
         }).filter(Boolean);
     });
 }
+
 
 // Auto-scroll function
 async function autoScroll(page) {
@@ -426,7 +637,9 @@ async function autoScroll(page) {
 }
 
 async function crawlHirist(role, location, minExp = '', maxExp = '') {
+    const puppeteer = require('puppeteer');
     let browser;
+
     try {
         console.log(`Scraping Hirist.tech for ${role} in ${location}...`);
         browser = await puppeteer.launch({
@@ -440,10 +653,8 @@ async function crawlHirist(role, location, minExp = '', maxExp = '') {
             'Accept-Language': 'en-US,en;q=0.9',
         });
 
-        // Build the URL with query parameters
         const searchQuery = role.toLowerCase().replace(/\s+/g, '-');
         let url = `https://www.hirist.tech/search/${searchQuery}?loc=${encodeURIComponent(location)}`;
-        
         if (minExp) url += `&minexp=${minExp}`;
         if (maxExp) url += `&maxexp=${maxExp}`;
 
@@ -453,28 +664,68 @@ async function crawlHirist(role, location, minExp = '', maxExp = '') {
             timeout: 60000
         });
 
-        // Function to extract jobs from current page
+        // Scroll until 100+ jobs loaded
+        const targetCount = 100;
+        let prevCount = 0;
+
+        while (true) {
+            const jobs = await page.$$('.MuiBox-root.mui-style-1ancegk');
+            const count = jobs.length;
+
+            if (count >= targetCount) {
+                console.log(`Loaded ${count} jobs.`);
+                break;
+            }
+
+            if (count === prevCount) {
+                console.log('No new jobs loading, stopping...');
+                break;
+            }
+
+            prevCount = count;
+            await autoScroll(page);
+            await page.waitForTimeout(1000);
+        }
+
+        // Extract job data
         const extractJobs = async () => {
             return await page.evaluate(() => {
                 const jobElements = Array.from(document.querySelectorAll('.MuiBox-root.mui-style-1ancegk'));
+
                 return jobElements.map(job => {
                     const titleElement = job.querySelector('[data-testid="job_title"]');
                     const title = titleElement?.textContent?.trim() || 'N/A';
                     const link = titleElement?.closest('a')?.href || '#';
 
                     const company = job.querySelector('.MuiTypography-subtitle1')?.textContent?.trim() || 'N/A';
-                    
-                    const experienceElement = job.querySelector('[data-testid="job_experience"]');
-                    const experience = experienceElement?.textContent?.trim() || 'N/A';
-                    
+                    const experience = job.querySelector('[data-testid="job_experience"]')?.textContent?.trim() || 'N/A';
                     const location = job.querySelector('[data-testid="job_location"]')?.textContent?.trim() || 'N/A';
-                    
                     const salary = job.querySelector('.MuiTypography-root.mui-style-1n4cg6k')?.textContent?.trim() || 'Not specified';
-                    
-                    // Extract skills if available
+
                     const skillsElement = job.querySelector('.MuiBox-root.mui-style-1u0q1tk');
                     const skills = skillsElement ? 
                         Array.from(skillsElement.querySelectorAll('span')).map(span => span.textContent.trim()) : [];
+
+                    // Extract and parse posted date
+                    let postedDate = 'N/A';
+                    const dateText = job.querySelector('[data-testid="job_posting_date"]')?.textContent || '';
+                    const relative = dateText.toLowerCase();
+
+                    const now = new Date();
+                    const days = relative.match(/(\d+)\s+day/);
+                    const weeks = relative.match(/(\d+)\s+week/);
+                    const hours = relative.match(/(\d+)\s+hour/);
+                    const minutes = relative.match(/(\d+)\s+minute/);
+
+                    if (days) {
+                        now.setDate(now.getDate() - parseInt(days[1]));
+                        postedDate = now.toISOString().split('T')[0];
+                    } else if (weeks) {
+                        now.setDate(now.getDate() - parseInt(weeks[1]) * 7);
+                        postedDate = now.toISOString().split('T')[0];
+                    } else if (hours || minutes) {
+                        postedDate = now.toISOString().split('T')[0];
+                    }
 
                     return { 
                         title, 
@@ -485,59 +736,17 @@ async function crawlHirist(role, location, minExp = '', maxExp = '') {
                         salary,
                         link,
                         source: 'Hirist.tech',
-                        postedDate: new Date().toISOString()
+                        postedDate,
+                        scrapedDate: new Date().toISOString()
                     };
                 });
             });
         };
 
-        let allJobs = [];
-        let currentPage = 1;
-        const maxPages = 10;
-
-        while (currentPage <= maxPages) {
-            console.log(`Scraping page ${currentPage}...`);
-
-            // Wait for jobs to load
-            try {
-                await page.waitForSelector('.MuiBox-root.mui-style-1ancegk', { timeout: 30000 });
-            } catch (e) {
-                console.log('No jobs found on page', currentPage);
-                break;
-            }
-
-            // Scroll to load more jobs
-            await autoScroll(page);
-
-            // Extract jobs from current page
-            const pageJobs = await extractJobs();
-            if (pageJobs.length === 0) break;
-            
-            allJobs = [...allJobs, ...pageJobs];
-            console.log(`Found ${pageJobs.length} jobs on page ${currentPage}`);
-
-            // Try to go to next page
-            try {
-                const nextButton = await page.$('button[aria-label="Go to next page"]');
-                if (nextButton && !await nextButton.evaluate(btn => btn.disabled)) {
-                    await Promise.all([
-                        page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 }),
-                        nextButton.click()
-                    ]);
-                    currentPage++;
-                    await new Promise(resolve => setTimeout(resolve, 2000)); // Replaced waitForTimeout
-                } else {
-                    console.log('No more pages available');
-                    break;
-                }
-            } catch (e) {
-                console.log(`Failed to navigate to next page: ${e.message}`);
-                break;
-            }
-        }
-
-        console.log(`Total jobs found from Hirist.tech: ${allJobs.length}`);
+        const allJobs = await extractJobs();
+        console.log(`Extracted ${allJobs.length} jobs.`);
         return allJobs;
+
     } catch (error) {
         console.error('Hirist.tech scraping failed:', error);
         throw error;
@@ -545,6 +754,7 @@ async function crawlHirist(role, location, minExp = '', maxExp = '') {
         if (browser) await browser.close();
     }
 }
+
 
 // Updated autoScroll function without waitForTimeout
 async function autoScroll(page) {
@@ -622,9 +832,7 @@ function generateEmailHtml(jobs) {
 
 // API Routes
 app.post('/api/crawl', async (req, res) => {
-    console.log('POST /api/crawl received'); // Debug log
-  console.log('Headers:', req.headers); // Log headers
-  console.log('Body:', req.body); // Log body
+  let browser; // Declare browser here if needed
   try {
     const { role, location, source = 'naukri', experience } = req.body;
 
@@ -640,20 +848,17 @@ app.post('/api/crawl', async (req, res) => {
 
     switch (source.toLowerCase()) {
       case 'naukri':
-        console.log(`Starting Naukri crawl for ${role} in ${location}`);
         jobs = await crawlNaukri(role, location, experience);
         break;
-
       case 'shine':
-        console.log(`Starting Shine crawl for ${role} in ${location}`);
         jobs = await crawlShine(role, location);
         break;
-      
       case 'hirist':
-        console.log(`Starting Hirist crawl for ${role} in ${location}`);
         jobs = await crawlHirist(role, location);
         break;
-
+      case 'linkedin':
+        jobs = await crawlLinkedIn(role, location, experience);
+        break;
       default:
         return res.status(400).json({
           success: false,
@@ -661,18 +866,17 @@ app.post('/api/crawl', async (req, res) => {
         });
     }
 
-    // Save to database
-     const { newJobs, duplicates } = await saveJobs(jobs);
+    const { newJobs, duplicates } = await saveJobs(jobs);
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
 
-   res.json({
+    res.json({
       success: true,
       source,
       role,
       location,
       totalJobs: jobs.length,
-      newJobs,       // Use the returned count
-      duplicates,    // Use the returned count
+      newJobs,
+      duplicates,
       duration: `${duration} seconds`,
       jobs: jobs.slice(0, 50)
     });
@@ -684,6 +888,10 @@ app.post('/api/crawl', async (req, res) => {
       error: error.message,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
   }
 });
 
