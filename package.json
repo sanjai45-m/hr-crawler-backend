@@ -4,7 +4,6 @@
   "main": "index.js",
   "scripts": {
     "start": "node server.js",
-    "install": "npm install && npx puppeteer install",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -23,7 +22,6 @@
     "nodemailer": "^7.0.4",
     "pg": "^8.16.3",
     "puppeteer": "^24.14.0",
-    "puppeteer-core": "^10.4.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "robots-parser": "^3.0.1",
