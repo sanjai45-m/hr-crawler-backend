@@ -3,6 +3,10 @@
     {
       "source": "appsail-nodejs",
       "name": "crawler"
+    },
+    {
+      "source": "appsail-nodejs",
+      "name": "hr-cralwee"
     }
   ]
 }

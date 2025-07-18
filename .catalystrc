@@ -1,10 +1,10 @@
 {
   "defaults": {
-    "project": 1,
+    "project": 2,
     "env": 1
   },
   "actives": {
-    "project": 1,
+    "project": 2,
     "env": 1
   },
   "projects": [
@@ -15,6 +15,24 @@
       "domain": {
         "id": "50029180178",
         "name": "crawler-60031382506.development"
+      },
+      "timezone": "Asia/Kolkata",
+      "env": [
+        {
+          "idx": 1,
+          "id": "60031382506",
+          "name": "Development",
+          "type": 3
+        }
+      ]
+    },
+    {
+      "idx": 2,
+      "id": "9058000000083024",
+      "name": "hr-crawler-backend",
+      "domain": {
+        "id": "50029522623",
+        "name": "hr-crawler-backend-60031382506.development"
       },
       "timezone": "Asia/Kolkata",
       "env": [
