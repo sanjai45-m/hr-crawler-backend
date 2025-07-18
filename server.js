@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 // Add stealth plugin to avoid detection
 puppeteer.use(StealthPlugin());
+const chromium = require('@sparticuz/chromium');
 
 const app = express();
 app.use(cors({ origin: '*' }));
@@ -104,8 +105,8 @@ async function crawlLinkedIn(role, location, experience = '', maxPages = 5) {
     try {
         console.log(`Scraping LinkedIn for ${role} in ${location}...`);
         browser = await puppeteer.launch({
-            headless: "new",
-            args: [
+executablePath: chromium.path,
+    headless: chromium.headless,            args: [
     '--no-sandbox',
     '--disable-setuid-sandbox',
     '--disable-dev-shm-usage',
@@ -480,8 +481,8 @@ async function crawlShine(role, location, experience = '', maxPages = 5) {
     try {
         console.log(`Scraping Shine for ${role} in ${location}...`);
         browser = await puppeteer.launch({
-            headless: "new",
-            // executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || 
+executablePath: chromium.path,
+    headless: chromium.headless,            // executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || 
             //               '/usr/bin/google-chrome-stable',
             args: [
                '--no-sandbox',
